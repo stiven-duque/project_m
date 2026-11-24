@@ -11,9 +11,10 @@ Este README es la guía de mantenimiento: con él y el repositorio se puede reto
 
 | Vista | Qué tiene |
 |---|---|
-| **Cronograma** (`#cronograma`) | Tabla editable (EDT con fases, tareas, hitos), predecesoras estilo MS Project, ★ hitos clave, y Gantt en SVG con ruta crítica, % completado, vínculos, fines de semana y festivos de Colombia, línea de hoy. |
-| **Avance** (`#avance`) | Fecha de corte; indicadores (avance real del proyecto, planificado, desviación, hitos cumplidos, fin previsto); barras por sección con % real vs. % planificado y estado; tabla de hitos clave; opción "ver como tabla". |
-| **Hitos** (`#hitos`) | Gantt solo de hitos (todos o solo ★ clave), con estado cumplido / vencido / próximo / pendiente y línea de corte; opción tabla. |
+| **Cronograma** (`#cronograma`) | Tabla editable (EDT con fases, tareas, hitos) con 3 juegos de columnas (Planificación / Línea base / Avance), predecesoras estilo MS Project, ★ hitos clave, comienzo y fin editables (reprogramación), **línea base** (crear en borrador → editar → fijar → nueva LB versionada) y Gantt en SVG con ruta crítica, % completado, vínculos, **barra gris de la línea base**, fines de semana y festivos de Colombia, línea de hoy. |
+| **Avance** (`#avance`) | Fecha de corte; indicadores (avance real, esperado según línea base y con fechas actuales, desviación vs. LB, hitos cumplidos, fin previsto); barras por sección (real vs. esperado LB) con estado; hitos clave con fecha LB y variación; "ver como tabla"; registrar corte. |
+| **Hitos** (`#hitos`) | Gantt solo de hitos (todos o solo ★ clave), con estado cumplido / vencido / próximo / pendiente, **rombo hueco en la fecha de la línea base** unido a la fecha actual, y línea de corte; tabla con fecha LB y variación. |
+| **Curva S** (`#curva`) | Gráfico de líneas por corte (semanal-viernes / quincenal / mensual), para el proyecto o una fase: **esperado según línea base**, **esperado con fechas actuales** y **real** (de los cortes registrados); tooltip con los tres valores; tabla; lista de cortes registrados (registrar / quitar). |
 
 Menú **Archivo**: Nuevo, Abrir (`.plan.json` o XML), Guardar / Guardar como (`.plan.json`), Importar XML de
 ProjectLibre / MS Project, Exportar XML para ProjectLibre / MS Project, Exportar a Excel (CSV), Imprimir / PDF, Cargar ejemplo.
@@ -50,18 +51,20 @@ El archivo está dividido en secciones marcadas con `/* ===...=== nombre */`. Bu
 | `motor: cronograma (ruta crítica)` | `class ScheduleError`, `schedule(project, calendar)` → fechas, holguras, ruta crítica. |
 | `modelo: plan editable y EDT` | `levelOf`, `hasChildren`, `subtreeEnd`, `ancestorsOf`, `insertTask`, `deleteTask`, `indentTask`, `outdentTask`, `moveTask`, `updateTask`, `wbsCodes`, `samplePlan`. |
 | `modelo: predecesoras estilo MS Project` | `parsePredecessors`, `formatPredecessors`, `PredecessorSyntaxError`. |
-| `avance a la fecha de corte` | `computeProgress`, `statusOf`, umbrales; `listMilestones`, `milestoneStatus`. |
+| `avance a la fecha de corte` | `expectedPct`, `computeProgress`, `statusOf`, umbrales; `listMilestones`, `milestoneStatus`. |
+| `línea base, reprogramaciones y cortes` | `createBaseline`, `setBaselineDates`, `fixBaseline`, `discardDraftBaseline`, `currentBaseline`, `draftBaseline`, `baselineDates`, `varianceDays`, `addReschedule`, `recordCut`, `deleteCut`, `cutDates`, `sCurve`, `BaselineError`. |
 | `archivos: .plan.json` | `serializePlan`, `parsePlanFile`, `validatePlan`, `PlanFileError`. |
 | `archivos: importar XML…` | `importMsProjectXml` (MSPDI), `isoDurationHours`, `MsProjectImportError`. |
 | `archivos: exportar XML…` | `exportMsProjectXml` (con calendario "Colombia"). |
 | `archivos: CSV para Excel` | `planToCsv`. |
 | `archivos: abrir y guardar…` | `openFile`, `saveFileAs`, `writeToHandle`, `download`, `fileNameFor` (File System Access API + respaldo). |
 | `vistas: utilidades` | `esc`, `shortDate`, `longDate`, `pct`, `pts`, `statusHtml`. |
-| `vistas: tabla de tareas` | `COLUMNS`, `renderTableBody`. |
+| `vistas: tabla de tareas` | `COLUMN_DEFS`, `COLUMN_SETS`, `COLUMN_HELP`, `renderTableHead`, `renderTableBody`. |
 | `vistas: Gantt del cronograma (SVG)` | `renderGantt` (encabezado + cuerpo + `xOf`), `ROW_H`, `HEAD_H`, `DAY_WIDTH`. |
 | `vistas: tablero de avance` | `progressSections`, `renderProgressChart`, `renderProgressTable`. |
 | `vistas: Gantt de hitos` | `renderMilestoneTimeline`, `renderMilestoneTable`. |
-| `aplicación` | Estado, layout (`#app`), `render()`, vistas, archivos, comandos (`run(cmd)`), eventos, atajos. |
+| `vistas: curva S (líneas)` | `renderSCurve`, `sCurveRows`, `renderSCurveTable`. |
+| `aplicación` | Estado, layout (`#app`), `render()`, vistas (`renderSchedule`, `renderLbControls`, `renderProgressBoard`, `renderMilestoneBoard`, `renderCurveBoard`), `commitReschedule`, archivos, comandos (`run(cmd, el)`), eventos, atajos. |
 
 **Dependencias entre capas** (de abajo hacia arriba): motor → modelo → avance → archivos → vistas → aplicación.
 El motor y el modelo no tocan el DOM (salvo `importMsProjectXml`, que usa `DOMParser`).
@@ -77,8 +80,26 @@ El motor y el modelo no tocan el DOM (salvo `importMsProjectXml`, que usa `DOMPa
   startDate: '2026-02-02',       // AAAA-MM-DD; si no es laboral se usa el siguiente día laboral
   statusDate: '2026-02-20',      // opcional: fecha de corte del avance (si falta, se usa hoy)
   nextId: 14,                    // siguiente número para ids t1, t2, ...
-  tasks: [Task, ...]             // ORDEN = orden de filas
+  tasks: [Task, ...],            // ORDEN = orden de filas
+  baselines: [Baseline, ...],    // opcional: líneas base, ordenadas por número (máximo una en borrador)
+  cortes: [Corte, ...]           // opcional: fotos del % real por fecha (curva S)
 }
+```
+
+### Baseline (línea base)
+```js
+{
+  id: 'lb1', number: 1,          // LB 1, LB 2, ... (id = 'lb' + número)
+  status: 'borrador' | 'fijada', // en borrador se editan sus fechas; fijada = inmutable
+  createdAt: '2026-02-02', fixedAt: '2026-02-03',  // fixedAt solo si está fijada
+  reason: 'Cambio de alcance aprobado',            // motivo (se pide desde la LB 2)
+  tasks: { t6: { start: '2026-02-09', finish: '2026-02-18', duration: 8 }, ... }  // solo tareas hoja; los resúmenes se calculan
+}
+```
+
+### Corte (para la curva S)
+```js
+{ date: '2026-02-13', recordedAt: '2026-02-13', tasks: { t2: 100, t6: 40, ... } }  // % real de cada tarea hoja en esa fecha
 ```
 
 ### Task
@@ -93,7 +114,10 @@ El motor y el modelo no tocan el DOM (salvo `importMsProjectXml`, que usa `DOMPa
   ],
   startNoEarlierThan: '2026-02-16', // opcional: restricción "no comenzar antes de"
   percentComplete: 75,           // opcional: 0-100 (en hitos, 100 = cumplido)
-  key: true                      // opcional: hito clave (★)
+  key: true,                     // opcional: hito clave (★)
+  history: [                     // opcional: reprogramaciones (se registran si hay una línea base fijada)
+    { at: '2026-02-12', prevStart: '2026-02-09', prevFinish: '2026-02-18', start: '2026-02-09', finish: '2026-02-23', reason: '...' }
+  ]
 }
 ```
 
@@ -157,6 +181,30 @@ Las filas se traducen a ids internos, así que mover filas no rompe vínculos.
 - **Hitos** (`milestoneStatus`): cumplido (100 %) · vencido (fecha < corte) · próximo (dentro de `UPCOMING_DAYS` = 14 días)
   · pendiente. `listMilestones` añade la fase de primer nivel a la que pertenece cada hito.
 
+### Línea base, reprogramación y curva S (sección `línea base, reprogramaciones y cortes`)
+- **Ciclo**: `createBaseline` copia las fechas actuales (`schedule`) de las tareas hoja → **borrador**.
+  `setBaselineDates` cambia fechas solo en borrador (inicio ajustado a día laboral; duración = días laborales inicio→fin;
+  hito = una sola fecha). `fixBaseline` la fija (inmutable, `BaselineError` si se intenta editar).
+  `createBaseline` de nuevo crea LB n+1 (pide motivo); `discardDraftBaseline` descarta el borrador.
+- **Contra cuál se compara**: `currentBaseline(plan, id)` = la elegida en "Comparar con", si no la **última fijada**,
+  si no el borrador. La tabla muestra (y deja editar) el borrador si existe; el Gantt, la línea base de comparación.
+- `baselineDates` añade las tareas resumen calculadas (mín. inicio, máx. fin). Tareas creadas después de fijar no tienen LB
+  ("—") y no entran en el esperado LB.
+- **Reprogramar** (decisión: "las sucesoras se mueven solas"): en la tabla, **Comienzo** fija `startNoEarlierThan`
+  (vacío = quitar) y **Fin** recalcula la duración; el motor mueve las sucesoras. Si existe una línea base fijada, cada
+  cambio de fechas de una tarea (comienzo, fin o duración) se guarda en `history` con su motivo (`prompt`; cancelar =
+  no aplicar el cambio) — función `commitReschedule`.
+- **Variación** (`varianceDays`) = días laborales entre el fin de la línea base y el fin actual (+ atraso, − adelanto).
+- **% esperado** (`expectedPct`): mismo criterio para línea base y fechas actuales. `computeProgress(plan, result,
+  calendar, fecha, baseline, percents)` devuelve `actual`, `plannedCurrent`, `plannedLB` (null sin LB) y `planned`
+  (= plannedLB si existe, si no plannedCurrent; la desviación y el estado se miden contra `planned`).
+  Esperado LB ponderado por la duración de la línea base; real y esperado actual, por la duración actual.
+- **Cortes**: `recordCut(plan, fecha)` guarda el % real de cada tarea hoja (reemplaza el de la misma fecha);
+  `deleteCut`. Solo los cortes registrados alimentan la línea real (decisión: "registrar corte", no estimar).
+- **Curva S**: `cutDates(desde, hasta, 'semanal'|'quincenal'|'mensual')` (viernes / viernes alternos / fin de mes, cubriendo
+  hasta el fin del proyecto o de la LB). `sCurve(...)` → `{ from, to, expected: [{date, lb, current}], real: [{date, real}] }`
+  para el proyecto (`PROJECT_KEY`) o una fase.
+
 ---
 
 ## 7. Formatos de archivo
@@ -165,8 +213,9 @@ Las filas se traducen a ids internos, así que mover filas no rompe vínculos.
 ```json
 { "format": "planificador", "version": 1, "savedAt": "2026-11-23T19:00:00.000Z", "plan": { ... } }
 ```
-- `validatePlan` revisa todo (tipos, fechas reales, ids únicos, padres y predecesoras existentes) y recalcula `nextId`
-  si viene mal. **Si se agrega un campo nuevo a Task/Plan, hay que agregarlo en `validatePlan`**, si no se pierde al abrir.
+- `validatePlan` revisa todo (tipos, fechas reales, ids únicos, padres y predecesoras existentes, líneas base: número
+  único, estado, fechas, como máximo un borrador; cortes: fecha única y % 0-100; historial) y recalcula `nextId`
+  si viene mal. Entradas de línea base o cortes de tareas que ya no existen se ignoran. **Si se agrega un campo nuevo a Task/Plan, hay que agregarlo en `validatePlan`**, si no se pierde al abrir.
 - Si cambia el formato de forma incompatible: subir `FILE_VERSION` y migrar en `parsePlanFile`.
 
 ### Navegador (`localStorage`)
@@ -187,44 +236,58 @@ ProjectLibre exporta e importa este formato (Archivo → Guardar como → XML). 
 | `PredecessorLink/Type` (0 FF, 1 FS, 2 SF, 3 SS) | `type` | |
 | `LinkLag` (décimas de minuto) / `LagFormat` | `lag` | `LagFormat` 19/20 = porcentaje de la predecesora; se redondea y avisa |
 | vínculo hacia o desde una tarea resumen | — | **se quita y se avisa** (el motor no los admite) |
+| `Task/Baseline` con `Number = 0` (`Start`, `Finish`, `Duration`) | `baselines[0]` (LB 1 **fijada**, "importada del XML") | tareas sin Baseline se avisan; las demás líneas base de Project (1-10) se ignoran |
 
 **Exportar** genera MSPDI con: tarea resumen del proyecto (UID 0), `UID`/`ID` = número de fila, `WBS`/`OutlineNumber`,
 `OutlineLevel`, `Start` 08:00 / `Finish` 17:00, `Duration` en horas (8 h/día), `PercentComplete`, `Summary`,
-`Milestone`, `Critical`, restricción, vínculos (`LinkLag` = días × 4800, `LagFormat` 7) y un calendario base
+`Milestone`, `Critical`, restricción, vínculos (`LinkLag` = días × 4800, `LagFormat` 7), **`Baseline` número 0** con la
+línea base de comparación (tareas y resúmenes) y un calendario base
 **"Colombia"** (L-V 8-12 y 13-17) con los festivos como excepciones desde un año antes del inicio hasta dos después del fin.
 El ★ de hito clave **no** viaja en el XML (el formato no tiene campo para eso).
 Ida y vuelta (exportar → importar) da el mismo plan y las mismas fechas.
 
 ### CSV para Excel
 Separador `;` (configuración regional de Colombia), BOM UTF-8 (tildes correctas), `\r\n`. Columnas:
-Fila; EDT; Nombre; Tipo; Duración (días); Comienzo; Fin; Predecesoras; % real; % planificado; Holgura (días); Crítica; Hito clave.
+Fila; EDT; Nombre; Tipo; Duración (días); Comienzo; Fin; Inicio LB; Fin LB; Variación fin (días); Predecesoras; % real;
+% esperado LB; % esperado actual; Holgura (días); Crítica; Hito clave; Reprogramaciones. (Las fotos de cortes e historial
+completo viajan en el `.plan.json`.)
 
 ---
 
 ## 8. Aplicación (interfaz)
 
 ### Estado (sección `aplicación`)
-- `plan` (fuente de verdad), `selectedId`, `zoom` (`dias`/`semanas`/`meses`), `view` (`cronograma`/`avance`/`hitos`),
-  `collapsed` (resúmenes contraídos), `pendingFocus` (celda a enfocar tras re-dibujar), `boardOptions`
-  (`level`, `progressTable`, `onlyKey`, `milestoneTable`), `fileHandle`, `fileMeta`.
+- `plan` (fuente de verdad), `selectedId`, `zoom` (`dias`/`semanas`/`meses`), `view` (`VIEWS` = cronograma, avance, hitos,
+  curva), `collapsed` (resúmenes contraídos), `pendingFocus` (celda a enfocar tras re-dibujar), `boardOptions`
+  (`level`, `progressTable`, `onlyKey`, `milestoneTable`), `columnSet` (`planificacion`/`lineabase`/`avance`),
+  `compareId` (línea base elegida; null = vigente), `curveOptions` (`scope`, `frequency`, `table`), `currentCurve`
+  (datos del tooltip de la curva), `fileHandle`, `fileMeta`.
+- Columnas de la tabla: `COLUMN_DEFS` (clave → título, ancho), `COLUMN_SETS` (qué claves por juego), `COLUMN_HELP`
+  (tooltips); `renderTableBody(..., ctx)` con `ctx = { set, lb, draft, progress, calendar }`. Para agregar una columna:
+  definirla en `COLUMN_DEFS`, su celda en el objeto `cell` de `renderTableBody` y añadirla a un juego.
 - **Ciclo**: toda edición crea un plan nuevo y llama `commit(next)` → guarda en `localStorage` → `render()`.
   `render()` recalcula con `schedule()` y dibuja la vista activa, el encabezado, el aviso de error y la barra de estado.
 - Las vistas se generan como **strings HTML/SVG** y se asignan con `innerHTML` (todo texto pasa por `esc()`).
 
 ### Eventos (delegados en `document`)
 - `click` sobre `[data-cmd]` → `run(cmd)`; `[data-view]` → `setView`; `[data-action="toggle"|"key"]` en filas.
-- `change` en celdas `input[data-field]` (`name`, `duration`, `pred`, `pct`) y en controles (`#project-name`,
-  `#project-start`, `#status-date`, `#zoom`, `#level`, `#progress-table`, `#only-key`, `#milestone-table`).
-- Comandos (`run`): `add`, `milestone`, `delete`, `indent`, `outdent`, `up`, `down`, `new`, `open`, `import`, `save`,
-  `save-as`, `export-xml`, `export-csv`, `print`, `sample`, `cut-today`, `goto-start`, `goto-today`.
+- `click` sobre `[data-action="history"]` abre el historial de reprogramaciones de la tarea.
+- `change` en celdas `input[data-field]` (`name`, `duration`, `start`, `finish`, `pred`, `pct`, `lbstart`, `lbfinish`) y en
+  controles (`#project-name`, `#project-start`, `#status-date`, `#zoom`, `#column-set`, `#compare-lb`, `#level`,
+  `#progress-table`, `#only-key`, `#milestone-table`, `#curve-scope`, `#curve-frequency`, `#curve-table`).
+- Comandos (`run(cmd, el)`): `add`, `milestone`, `delete`, `indent`, `outdent`, `up`, `down`, `new`, `open`, `import`, `save`,
+  `save-as`, `export-xml`, `export-csv`, `print`, `sample`, `cut-today`, `goto-start`, `goto-today`, `lb-create`, `lb-fix`,
+  `lb-discard`, `cut-record`, `cut-delete` (fecha en `data-date`).
+- La curva S tiene un tooltip con línea vertical (`mousemove` sobre `#sc-overlay`, se ubica en el corte más cercano).
 - Atajos: Enter (confirma y baja), Shift+Enter (sube), Esc (cancela), Ctrl/Cmd+S, Ctrl/Cmd+Shift+S, Ctrl/Cmd+O,
   Ctrl/Cmd+Enter (nueva tarea), Supr (eliminar fila seleccionada), Alt+Shift+→ ← ↑ ↓ (sangría, quitar, subir, bajar).
-- `#cronograma`, `#avance`, `#hitos` en la URL abren esa vista (`hashchange`).
+- `#cronograma`, `#avance`, `#hitos`, `#curva` en la URL abren esa vista (`hashchange`).
 - Tabla y Gantt sincronizan el scroll vertical; filas de **30 px** en ambos (`ROW_H`, alto de `td`) y encabezados de **48 px**:
   si cambias uno, cambia el otro.
 
 ### Ejemplo
-`samplePlan(sampleStart())` arranca 15 días laborales antes de hoy, para que el tablero de avance muestre estados reales.
+`samplePlan(sampleStart())` arranca 15 días laborales antes de hoy, con la LB 1 fijada al inicio, el Backend reprogramado
+(+3 días, con historial) y cortes semanales hasta hoy, para que avance, hitos y curva S muestren datos reales.
 
 ---
 
@@ -232,8 +295,9 @@ Fila; EDT; Nombre; Tipo; Duración (días); Comienzo; Fin; Predecesoras; % real;
 
 - Colores como **variables CSS** en `:root`, con bloque `@media (prefers-color-scheme: dark)` para modo oscuro
   (automático según el sistema).
-- Paleta validada (daltonismo y contraste, claro y oscuro): serie `#2a78d6` (oscuro `#3987e5`), ruta crítica /
-  crítico `#d03b3b`; estados fijos: bien `#0ca30c`, alerta `#fab219`, serio `#ec835a`, crítico `#d03b3b`.
+- Paleta validada (daltonismo y contraste, claro y oscuro): serie 1 `#2a78d6` (oscuro `#3987e5`), serie 2 `#eb6834`
+  (oscuro `#d95926`), serie 3 `#1baf7a` (oscuro `#199e70`) — curva S: LB = serie 1, real = serie 2, actual = serie 3;
+  la línea base en el Gantt es gris (`--muted`); ruta crítica / crítico `#d03b3b`; estados fijos: bien `#0ca30c`, alerta `#fab219`, serio `#ec835a`, crítico `#d03b3b`.
   **Si agregas colores de series, valida la paleta** antes (distancia para daltonismo y contraste ≥ 3:1 sobre la superficie).
 - Reglas que siguen los tableros: un solo número grande (hero) por vista; barras delgadas (14 px) con extremo redondeado
   de 4 px y base recta; líneas de referencia finas y **continuas** (no punteadas); leyenda siempre que hay ≥ 2 elementos;
@@ -256,13 +320,17 @@ Todo se valida con **Edge en modo headless**, abriendo archivos locales. Ruta en
      --dump-dom "file:///ruta/validar.html"
    ```
    Casos mínimos a cubrir: festivos 2025/2026, los 4 tipos de vínculo con retraso, holgura y ruta crítica, ciclos,
-   resúmenes, restricción, hitos, predecesoras (leer/escribir/errores), operaciones de EDT, `.plan.json` ida y vuelta y
-   archivos inválidos, importar XML y **exportar→importar ida y vuelta**, CSV, avance y estados de hitos.
+   resúmenes, restricción (también en hitos), hitos, predecesoras (leer/escribir/errores), operaciones de EDT,
+   `.plan.json` ida y vuelta y archivos inválidos, importar XML y **exportar→importar ida y vuelta** (con línea base), CSV,
+   avance (esperado LB y actual), estados de hitos, línea base (crear, editar borrador, fijar, inmutable, LB 2, descartar),
+   variación, cortes, fechas de corte y curva S.
    Romper algo a propósito una vez para confirmar que la verificación lo detecta.
 2. **Flujos de usuario**: copia temporal del HTML con un `<script>` al final que simule acciones (fijar `value` y
    disparar `change`, `click` en `[data-cmd]`, `DragEvent('drop')` con un `File` para importar) y escriba resultados en un
-   `<pre>`; leerlo con `--dump-dom`. Sobrescribir `window.confirm = () => true` (si no, la página queda bloqueada) y
-   **esperar por condición** (lectura de archivos y guardado son asíncronos; `--virtual-time-budget` no los acelera).
+   `<pre>`; leerlo con `--dump-dom`. Sobrescribir `window.confirm = () => true` y `window.prompt = () => 'motivo'`
+   (si no, la página queda bloqueada) y **esperar por condición** (lectura de archivos y guardado son asíncronos;
+   `--virtual-time-budget` no los acelera). Para leer el plan desde `localStorage` hay que hacer antes un cambio (el
+   ejemplo recién abierto no se guarda hasta el primer `commit`). Las columnas elegidas se conservan al crear un plan nuevo.
 3. **Visual**: capturas de cada vista y en modo oscuro:
    ```bash
    "$EDGE" --headless=new --disable-gpu --user-data-dir=/tmp/perfil-ui --window-size=1600,1000 \
@@ -281,19 +349,21 @@ Las páginas y perfiles temporales se borran al terminar; **el repo solo contien
 - Duraciones y retrasos en **días enteros** (sin horas ni medios días).
 - Un solo calendario (L-V + festivos de Colombia); sin calendarios por tarea ni recursos con calendario propio.
 - No se arrastran barras en el Gantt: se edita desde la tabla.
-- Sin recursos ni costos, sin línea base, sin deshacer/rehacer.
-- El ★ hito clave se pierde al exportar a MSPDI (sí se conserva en `.plan.json`).
+- Sin recursos ni costos, sin deshacer/rehacer.
+- El ★ hito clave, los cortes y el historial de reprogramaciones no viajan en el XML (sí en `.plan.json`); del XML solo
+  se exporta/importa una línea base (la de comparación, como `Baseline` 0).
+- La línea real de la curva S solo tiene puntos en los cortes registrados (no se estima entre cortes).
 - Sin vínculos hacia/desde tareas resumen (se ponen en subtareas; al importar se quitan con aviso).
 - ProjectLibre `.pod` no se lee directo (usar XML).
 
 ## 12. Ideas para evolucionar
 
-- **Línea base** (guardar fechas planeadas y comparar en Gantt y tablero).
 - **Recursos** (asignación, carga, sobreasignación) y costos.
 - **Deshacer / rehacer** (pila de planes, ya que las operaciones son inmutables).
 - Arrastrar barras para cambiar fechas/duración y crear vínculos desde el Gantt.
 - Columna "No comenzar antes de" editable en la tabla y más restricciones de MS Project.
-- Curva S de avance (planificado vs. real en el tiempo) y avance por responsable.
+- Avance por responsable y curva S por responsable.
+- Recordatorio para registrar el corte semanal (por ejemplo, aviso al abrir si el último corte tiene más de 7 días).
 - Exportar el ★ hito clave en el XML (por ejemplo en un campo de texto personalizado `Text1`).
 
 ---
