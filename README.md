@@ -5,6 +5,9 @@ Se abre con doble clic en Edge o Chrome. **No requiere instalar nada** (ni Node,
 
 Este README es la guía de mantenimiento: con él y el repositorio se puede retomar y evolucionar el proyecto.
 
+**Ejemplo paso a paso:** [`examples/`](examples/) trae un plan listo (`prueba-linea-base.plan.json`) y su guía
+([`examples/README.md`](examples/README.md)) para practicar línea base, reprogramación, cortes y curva S.
+
 ---
 
 ## 1. Qué hace
@@ -340,7 +343,10 @@ Todo se valida con **Edge en modo headless**, abriendo archivos locales. Ruta en
    Revisar solapes de texto, alineación tabla/Gantt, etiquetas cortadas, y que la consola no tenga errores de la página
    (`--enable-logging=stderr --v=0`; los mensajes de `cv_display_link_mac` son del modo headless, no de la página).
 
-Las páginas y perfiles temporales se borran al terminar; **el repo solo contiene `planificador.html` y este README**.
+Las páginas y perfiles temporales se borran al terminar; **el repo solo contiene `planificador.html`, este README y
+`examples/`**. Si cambia el formato del `.plan.json` o el comportamiento de los pasos, regenerar el ejemplo con el propio
+motor (página temporal que arma el plan con `createBaseline`, `recordCut`, `addReschedule`… y lo serializa) y
+actualizar `examples/README.md`.
 
 ---
 

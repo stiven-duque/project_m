@@ -1,0 +1,161 @@
+{
+  "format": "planificador",
+  "version": 1,
+  "savedAt": "2026-11-27T22:00:00.000Z",
+  "plan": {
+    "name": "Prueba línea base",
+    "startDate": "2026-11-03",
+    "nextId": 7,
+    "tasks": [
+      {
+        "id": "t1",
+        "name": "Plan 1",
+        "duration": 0,
+        "dependencies": []
+      },
+      {
+        "id": "t2",
+        "name": "task 1",
+        "duration": 5,
+        "parentId": "t1",
+        "dependencies": [],
+        "percentComplete": 100
+      },
+      {
+        "id": "t3",
+        "name": "Hito 1 - Requisitos aprobados",
+        "duration": 0,
+        "parentId": "t1",
+        "dependencies": [
+          {
+            "predecessorId": "t2",
+            "type": "FS",
+            "lag": 0
+          }
+        ],
+        "key": true,
+        "percentComplete": 100
+      },
+      {
+        "id": "t4",
+        "name": "plan 2",
+        "duration": 0,
+        "dependencies": []
+      },
+      {
+        "id": "t5",
+        "name": "task 2",
+        "duration": 11,
+        "parentId": "t4",
+        "dependencies": [
+          {
+            "predecessorId": "t3",
+            "type": "FS",
+            "lag": 0
+          }
+        ],
+        "percentComplete": 100,
+        "history": [
+          {
+            "at": "2026-11-18",
+            "prevStart": "2026-11-10",
+            "prevFinish": "2026-11-20",
+            "start": "2026-11-10",
+            "finish": "2026-11-25",
+            "reason": "Proveedor entregó tarde"
+          }
+        ]
+      },
+      {
+        "id": "t6",
+        "name": "Hito 2 - Entrega",
+        "duration": 0,
+        "parentId": "t4",
+        "dependencies": [
+          {
+            "predecessorId": "t5",
+            "type": "FS",
+            "lag": 0
+          }
+        ],
+        "key": true,
+        "percentComplete": 100
+      }
+    ],
+    "baselines": [
+      {
+        "id": "lb1",
+        "number": 1,
+        "status": "fijada",
+        "createdAt": "2026-11-03",
+        "reason": "",
+        "tasks": {
+          "t2": {
+            "start": "2026-11-03",
+            "finish": "2026-11-09",
+            "duration": 5
+          },
+          "t3": {
+            "start": "2026-11-09",
+            "finish": "2026-11-09",
+            "duration": 0
+          },
+          "t5": {
+            "start": "2026-11-10",
+            "finish": "2026-11-20",
+            "duration": 8
+          },
+          "t6": {
+            "start": "2026-11-20",
+            "finish": "2026-11-20",
+            "duration": 0
+          }
+        },
+        "fixedAt": "2026-11-03"
+      }
+    ],
+    "cortes": [
+      {
+        "date": "2026-11-06",
+        "recordedAt": "2026-11-06",
+        "tasks": {
+          "t2": 60,
+          "t3": 0,
+          "t5": 0,
+          "t6": 0
+        }
+      },
+      {
+        "date": "2026-11-13",
+        "recordedAt": "2026-11-13",
+        "tasks": {
+          "t2": 100,
+          "t3": 100,
+          "t5": 30,
+          "t6": 0
+        }
+      },
+      {
+        "date": "2026-11-20",
+        "recordedAt": "2026-11-20",
+        "tasks": {
+          "t2": 100,
+          "t3": 100,
+          "t5": 70,
+          "t6": 0
+        }
+      },
+      {
+        "date": "2026-11-27",
+        "recordedAt": "2026-11-27",
+        "tasks": {
+          "t2": 100,
+          "t3": 100,
+          "t5": 100,
+          "t6": 100
+        }
+      }
+    ],
+    "statusDate": "2026-11-27"
+  }
+}
